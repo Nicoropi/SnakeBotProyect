@@ -1,3 +1,4 @@
+from collections import deque
 import time
 import mss
 import numpy as np
@@ -8,7 +9,7 @@ class Observer:
         self.monitor = {"top": 0, "left": 0, "width": 0, "height": 0}
         self.dim = 0
         self.grid = []
-        self.snk_l = 2
+        self.snake = deque()
 
     def startGame(self):
         mss.mss().shot(output="startScreen.png")
@@ -61,8 +62,14 @@ class Observer:
         # cv.imwrite("grid.png", img)
 
         self.dim = max(contours, key=cv.contourArea)[1][0][1]
-        sqrs = self.monitor["height"] // self.dim
-        self.grid = np.zeros((sqrs,sqrs))
+        y_sqrs = (self.monitor["height"] // self.dim) + 2
+        x_sqrs = (self.monitor["width"] // self.dim) + 2
+        self.grid = np.zeros((y_sqrs,x_sqrs))
+
+        for i in range(len(self.grid)):
+            for j in range(len(self.grid[0])):
+                if j == 0 or j == len(self.grid[0])-1 or i == 0 or i == len(self.grid)-1:
+                    self.grid[i][j] = 9
 
     def getApple(self):
         img = np.array(mss.mss().grab(self.monitor))
@@ -81,10 +88,84 @@ class Observer:
                     x, y, w, h = cv.boundingRect(contour)
                     x_coor = int(x+w/2) // self.dim
                     y_coor = int(y+h/2) // self.dim
-                    self.grid[y_coor][x_coor] = 1
+                    self.grid[y_coor+1][x_coor+1] = 1
+
+    def getSnake(self):
+        # Aqui me complique re duro, asi que capaz esto se puede mejorar un monton
+
+        # Esta parte reconoce solo la cabeza y la guarda en la matriz
+        img = np.array(mss.mss().grab(self.monitor))
+        img_hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
+
+        lower = np.array([110, 150, 240])          # (0-179, 0-255, 0-255)
+        upper = np.array([120, 255, 255])          # (0-179, 0-255, 0-255)
+        mask = cv.inRange(img_hsv, lower, upper)
+
+        contours, hierarchy = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        if len(contours) != 0:
+            for contour in contours:
+                if cv.contourArea(contour) > 300:
+                    x, y, w, h = cv.boundingRect(contour)
+                    x_coor = (int(x+w/2) // self.dim) + 1
+                    y_coor = (int(y+h/2) // self.dim) + 1
+                    self.grid[y_coor][x_coor] = 2
+
+        # todo esto es para reconocer el resto de la serpiente y guardarla en la matriz y en la queue que representa la serpiente
+        temp_list = [[int(y_coor), int(x_coor)]]
+        q = deque()
+        q.append([y_coor, x_coor]) 
+
+        lower = np.array([110, 150, 150])          # (0-179, 0-255, 0-255)
+        upper = np.array([120, 255, 255])          # (0-179, 0-255, 0-255)
+        mask = cv.inRange(img_hsv, lower, upper)
+
+        area = self.dim * self.dim
+        while q:
+            cy,cx = q.pop()                        # Grid coordinates
+            vx = cx-1; vy = cy-1                   # Image coordinates
+
+            if self.grid[cy-1][cx] == 0:
+                sqr = mask[(vy-1)*self.dim:(vy)*self.dim, (vx)*self.dim:(vx+1)*self.dim]
+                blue_pixels = cv.countNonZero(sqr)
+                ratio = blue_pixels / area
+                if ratio > 0.25:
+                    self.grid[cy-1][cx] = 2
+                    q.append([cy-1, cx])
+                    temp_list.append([int(cy-1), int(cx)])
+
+            if self.grid[cy+1][cx] == 0:
+                sqr = mask[(vy+1)*self.dim:(vy+2)*self.dim, (vx)*self.dim:(vx+1)*self.dim]
+                blue_pixels = cv.countNonZero(sqr)
+                ratio = blue_pixels / area
+                if ratio > 0.25:
+                    self.grid[cy+1][cx] = 2
+                    q.append([cy+1, cx])
+                    temp_list.append([int(cy+1), int(cx)])
+
+            if self.grid[cy][cx-1] == 0:
+                sqr = mask[(vy)*self.dim:(vy+1)*self.dim, (vx-1)*self.dim:(vx)*self.dim]
+                blue_pixels = cv.countNonZero(sqr)
+                ratio = blue_pixels / area
+                if ratio > 0.25:
+                    self.grid[cy][cx-1] = 2
+                    q.append([cy, cx-1])
+                    temp_list.append([int(cy), int(cx-1)])
+                
+            if self.grid[cy][cx+1] == 0:
+                sqr = mask[(vy)*self.dim:(vy+1)*self.dim, (vx+1)*self.dim:(vx+2)*self.dim]
+                blue_pixels = cv.countNonZero(sqr)
+                ratio = blue_pixels / area
+                if ratio > 0.25:
+                    self.grid[cy][cx+1] = 2
+                    q.append([cy, cx+1])
+                    temp_list.append([int(cy), int(cx+1)])
+
+        for element in (temp_list[::-1]):
+            self.snake.append(element)
 
     def getGame(self):
         img = np.array(mss.mss().grab(self.monitor))
+        print(self.grid)
         cv.imshow("Snake Bot", img)
 
 time.sleep(1)
@@ -95,10 +176,12 @@ o = Observer()
 
 o.getBoard()
 o.getGrid()
+o.getApple()
+o.getSnake()
 
 while "Game":
     o.getGame()
 
-    if cv.waitKey(50) & 0xFF == ord("q"):
+    if cv.waitKey(40) & 0xFF == ord("q"):
             cv.destroyAllWindows()
             break
