@@ -124,24 +124,6 @@ class Observer:
             cy,cx = q.pop()                        # Grid coordinates
             vx = cx-1; vy = cy-1                   # Image coordinates
 
-            if self.grid[cy-1][cx] == 0:
-                sqr = mask[(vy-1)*self.dim:(vy)*self.dim, (vx)*self.dim:(vx+1)*self.dim]
-                blue_pixels = cv.countNonZero(sqr)
-                ratio = blue_pixels / area
-                if ratio > 0.25:
-                    self.grid[cy-1][cx] = 2
-                    q.append([cy-1, cx])
-                    temp_list.append([int(cy-1), int(cx)])
-
-            if self.grid[cy+1][cx] == 0:
-                sqr = mask[(vy+1)*self.dim:(vy+2)*self.dim, (vx)*self.dim:(vx+1)*self.dim]
-                blue_pixels = cv.countNonZero(sqr)
-                ratio = blue_pixels / area
-                if ratio > 0.25:
-                    self.grid[cy+1][cx] = 2
-                    q.append([cy+1, cx])
-                    temp_list.append([int(cy+1), int(cx)])
-
             if self.grid[cy][cx-1] == 0:
                 sqr = mask[(vy)*self.dim:(vy+1)*self.dim, (vx-1)*self.dim:(vx)*self.dim]
                 blue_pixels = cv.countNonZero(sqr)
@@ -150,23 +132,71 @@ class Observer:
                     self.grid[cy][cx-1] = 2
                     q.append([cy, cx-1])
                     temp_list.append([int(cy), int(cx-1)])
-                
-            if self.grid[cy][cx+1] == 0:
-                sqr = mask[(vy)*self.dim:(vy+1)*self.dim, (vx+1)*self.dim:(vx+2)*self.dim]
-                blue_pixels = cv.countNonZero(sqr)
-                ratio = blue_pixels / area
-                if ratio > 0.25:
-                    self.grid[cy][cx+1] = 2
-                    q.append([cy, cx+1])
-                    temp_list.append([int(cy), int(cx+1)])
 
         for element in (temp_list[::-1]):
             self.snake.append(element)
 
     def getGame(self):
         img = np.array(mss.mss().grab(self.monitor))
+        img_hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
+
+        lower = np.array([110, 150, 150])          # (0-179, 0-255, 0-255)
+        upper = np.array([120, 255, 255])          # (0-179, 0-255, 0-255)
+        mask = cv.inRange(img_hsv, lower, upper)
+
+        q = deque()
+        q.append(self.snake[-1]) 
+        area = self.dim * self.dim
+        while q:
+            cy,cx = q.pop()                        # Grid coordinates
+            vx = cx-1; vy = cy-1                   # Image coordinates
+
+            if self.grid[cy-1][cx] == 0:
+                sqr = mask[(vy-1)*self.dim:(vy)*self.dim, (vx)*self.dim:(vx+1)*self.dim]
+                blue_pixels = cv.countNonZero(sqr)
+                ratio = blue_pixels / area
+                if ratio > 0.25:
+                    self.snake.append([cy-1,cx])
+                    self.grid[cy-1][cx] = 2
+                    q.append([cy-1, cx])
+                    dy,dx = self.snake.popleft()
+                    self.grid[dy,dx] = 0
+
+            if self.grid[cy+1][cx] == 0:
+                sqr = mask[(vy+1)*self.dim:(vy+2)*self.dim, (vx)*self.dim:(vx+1)*self.dim]
+                blue_pixels = cv.countNonZero(sqr)
+                ratio = blue_pixels / area
+                if ratio > 0.25:
+                    self.snake.append([cy+1,cx])
+                    self.grid[cy+1][cx] = 2
+                    q.append([cy+1, cx])
+                    dy,dx = self.snake.popleft()
+                    self.grid[dy,dx] = 0
+
+            if self.grid[cy][cx-1] == 0:
+                sqr = mask[(vy)*self.dim:(vy+1)*self.dim, (vx-1)*self.dim:(vx)*self.dim]
+                blue_pixels = cv.countNonZero(sqr)
+                ratio = blue_pixels / area
+                if ratio > 0.25:
+                    self.snake.append([cy,cx-1])
+                    self.grid[cy][cx-1] = 2
+                    q.append([cy, cx-1])
+                    dy,dx = self.snake.popleft()
+                    self.grid[dy,dx] = 0
+                
+            if self.grid[cy][cx+1] == 0:
+                sqr = mask[(vy)*self.dim:(vy+1)*self.dim, (vx+1)*self.dim:(vx+2)*self.dim]
+                blue_pixels = cv.countNonZero(sqr)
+                ratio = blue_pixels / area
+                if ratio > 0.25:
+                    self.snake.append([cy,cx+1])
+                    self.grid[cy][cx+1] = 2
+                    q.append([cy, cx+1])
+                    dy,dx = self.snake.popleft()
+                    self.grid[dy,dx] = 0
+                    
         print(self.grid)
-        cv.imshow("Snake Bot", img)
+        cv.imshow("debug", mask)
 
 time.sleep(1)
 
