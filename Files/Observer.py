@@ -12,8 +12,7 @@ class Observer:
         self.snake = deque()
 
     def startGame(self):
-        mss.mss().shot(output="startScreen.png")
-        img = cv.imread("startScreen.png")
+        img = np.array(mss.mss().grab(mss.mss().monitors[1]))
 
         img_gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
         ret, im = cv.threshold(img_gray, 250, 255, cv.THRESH_BINARY)
@@ -33,8 +32,7 @@ class Observer:
         return ([x_mid,y_mid])
 
     def getBoard(self):
-        mss.mss().shot(output="Screen.png")
-        img = cv.imread("Screen.png")
+        img = np.array(mss.mss().grab(mss.mss().monitors[1]))
 
         # Video que me ayudo con las mascaras
         # https://www.youtube.com/watch?v=SJCu1d4xakQ&t=882s
@@ -147,56 +145,32 @@ class Observer:
         q = deque()
         q.append(self.snake[-1]) 
         area = self.dim * self.dim
+        
+        directions = [(-1,0),(1,0),(0,-1),(0,1)]
         while q:
             cy,cx = q.pop()                        # Grid coordinates
             vx = cx-1; vy = cy-1                   # Image coordinates
 
-            if self.grid[cy-1][cx] == 0:
-                sqr = mask[(vy-1)*self.dim:(vy)*self.dim, (vx)*self.dim:(vx+1)*self.dim]
-                blue_pixels = cv.countNonZero(sqr)
-                ratio = blue_pixels / area
-                if ratio > 0.25:
-                    self.snake.append([cy-1,cx])
-                    self.grid[cy-1][cx] = 2
-                    q.append([cy-1, cx])
-                    dy,dx = self.snake.popleft()
-                    self.grid[dy,dx] = 0
-
-            if self.grid[cy+1][cx] == 0:
-                sqr = mask[(vy+1)*self.dim:(vy+2)*self.dim, (vx)*self.dim:(vx+1)*self.dim]
-                blue_pixels = cv.countNonZero(sqr)
-                ratio = blue_pixels / area
-                if ratio > 0.25:
-                    self.snake.append([cy+1,cx])
-                    self.grid[cy+1][cx] = 2
-                    q.append([cy+1, cx])
-                    dy,dx = self.snake.popleft()
-                    self.grid[dy,dx] = 0
-
-            if self.grid[cy][cx-1] == 0:
-                sqr = mask[(vy)*self.dim:(vy+1)*self.dim, (vx-1)*self.dim:(vx)*self.dim]
-                blue_pixels = cv.countNonZero(sqr)
-                ratio = blue_pixels / area
-                if ratio > 0.25:
-                    self.snake.append([cy,cx-1])
-                    self.grid[cy][cx-1] = 2
-                    q.append([cy, cx-1])
-                    dy,dx = self.snake.popleft()
-                    self.grid[dy,dx] = 0
-                
-            if self.grid[cy][cx+1] == 0:
-                sqr = mask[(vy)*self.dim:(vy+1)*self.dim, (vx+1)*self.dim:(vx+2)*self.dim]
-                blue_pixels = cv.countNonZero(sqr)
-                ratio = blue_pixels / area
-                if ratio > 0.25:
-                    self.snake.append([cy,cx+1])
-                    self.grid[cy][cx+1] = 2
-                    q.append([cy, cx+1])
-                    dy,dx = self.snake.popleft()
-                    self.grid[dy,dx] = 0
-                    
+            for ny,nx in directions:
+                if self.grid[cy+ny][cx+nx] == 0 or self.grid[cy+ny][cx+nx]==1:
+                    sqr = mask[(vy+ny)*self.dim:(vy+ny+1)*self.dim, (vx+nx)*self.dim:(vx+nx+1)*self.dim]
+                    cv.imshow("debug", sqr)
+                    blue_pixels = cv.countNonZero(sqr)
+                    ratio = blue_pixels / area
+                    if ratio > 0.25:
+                        if self.grid[cy+ny][cx+nx]==1:
+                            self.snake.append([cy+ny, cx+nx])
+                            self.grid[cy+ny][cx+nx] = 2
+                            q.append([cy+ny, cx+nx])
+                            self.getApple()
+                        else:
+                            self.snake.append([cy+ny, cx+nx])
+                            self.grid[cy+ny][cx+nx] = 2
+                            q.append([cy+ny, cx+nx])
+                            dy,dx = self.snake.popleft()
+                            self.grid[dy,dx] = 0
+        
         print(self.grid)
-        cv.imshow("debug", mask)
 
 time.sleep(1)
 
@@ -209,8 +183,11 @@ o.getGrid()
 o.getApple()
 o.getSnake()
 
-while "Game":
-    o.getGame()
+while True:
+    try:
+        o.getGame()
+    except:
+        pass
 
     if cv.waitKey(40) & 0xFF == ord("q"):
             cv.destroyAllWindows()
