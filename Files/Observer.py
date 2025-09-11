@@ -3,6 +3,7 @@ import time
 import mss
 import numpy as np
 import cv2 as cv
+import pyautogui as pg
 
 class Observer:
     def __init__(self):
@@ -60,8 +61,8 @@ class Observer:
         # cv.imwrite("grid.png", img)
 
         self.dim = max(contours, key=cv.contourArea)[1][0][1] + 1
-        y_sqrs = (self.monitor["height"] // self.dim) + 2
-        x_sqrs = (self.monitor["width"] // self.dim) + 2
+        y_sqrs = (self.monitor["height"] // (self.dim - 1)) + 2
+        x_sqrs = (self.monitor["width"] // (self.dim - 1)) + 2
         self.grid = np.zeros((y_sqrs,x_sqrs))
 
         for i in range(len(self.grid)):
@@ -154,9 +155,9 @@ class Observer:
             for ny,nx in directions:
                 if self.grid[cy+ny][cx+nx] == 0 or self.grid[cy+ny][cx+nx]==1:
                     sqr = mask[(vy+ny)*self.dim:(vy+ny+1)*self.dim, (vx+nx)*self.dim:(vx+nx+1)*self.dim]
-                    cv.imshow("debug", sqr)
                     blue_pixels = cv.countNonZero(sqr)
                     ratio = blue_pixels / area
+
                     if ratio > 0.25:
                         if self.grid[cy+ny][cx+nx]==1:
                             self.snake.append([cy+ny, cx+nx])
@@ -169,26 +170,24 @@ class Observer:
                             q.append([cy+ny, cx+nx])
                             dy,dx = self.snake.popleft()
                             self.grid[dy,dx] = 0
-        
-        print(self.grid)
+                        print(self.grid)
 
-time.sleep(1)
+    def compute(self, percept):
+        if percept == "init":
+            time.sleep(0.5)
+            pg.click(self.startGame())
+            
+            time.sleep(0.5)
+            o.getBoard()
+            o.getGrid()
+            o.getApple()
+            o.getSnake()
+
+            print(self.grid)
+
 
 o = Observer()
-# coords = o.startGame()
-# print(*coords)
-
-o.getBoard()
-o.getGrid()
-o.getApple()
-o.getSnake()
+o.compute('init')
 
 while True:
-    try:
-        o.getGame()
-    except:
-        pass
-
-    if cv.waitKey(40) & 0xFF == ord("q"):
-            cv.destroyAllWindows()
-            break
+    o.getGame()
