@@ -59,7 +59,7 @@ class Observer:
  
         # cv.imwrite("grid.png", img)
 
-        self.dim = max(contours, key=cv.contourArea)[1][0][1]
+        self.dim = max(contours, key=cv.contourArea)[1][0][1] + 1
         y_sqrs = (self.monitor["height"] // self.dim) + 2
         x_sqrs = (self.monitor["width"] // self.dim) + 2
         self.grid = np.zeros((y_sqrs,x_sqrs))
