@@ -11,9 +11,10 @@ class Observer:
         self.dim = 0
         self.grid = []
         self.snake = deque()
+        self.sct = mss.mss()
 
     def startGame(self):
-        img = np.array(mss.mss().grab(mss.mss().monitors[1]))
+        img = np.array(self.sct.grab(self.sct.monitors[1]))
 
         img_gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
         ret, im = cv.threshold(img_gray, 250, 255, cv.THRESH_BINARY)
@@ -33,7 +34,7 @@ class Observer:
         return ([x_mid,y_mid])
 
     def getBoard(self):
-        img = np.array(mss.mss().grab(mss.mss().monitors[1]))
+        img = np.array(self.sct.grab(self.sct.monitors[1]))
 
         # Video que me ayudo con las mascaras
         # https://www.youtube.com/watch?v=SJCu1d4xakQ&t=882s
@@ -51,7 +52,7 @@ class Observer:
         self.monitor = {k: int(v) for k, v in self.monitor.items()}
 
     def getGrid(self):
-        img =  np.array(mss.mss().grab(self.monitor))
+        img =  np.array(self.sct.grab(self.monitor))
 
         img_gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
         ret, im = cv.threshold(img_gray, 180, 255, cv.THRESH_BINARY)
@@ -71,7 +72,7 @@ class Observer:
                     self.grid[i][j] = 9
 
     def getApple(self):
-        img = np.array(mss.mss().grab(self.monitor))
+        img = np.array(self.sct.grab(self.monitor))
         img_hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
 
         # Video que me ayudo
@@ -88,12 +89,15 @@ class Observer:
                     x_coor = int(x+w/2) // self.dim
                     y_coor = int(y+h/2) // self.dim
                     self.grid[y_coor+1][x_coor+1] = 1
+                    return True
+        
+        return False
 
     def getSnake(self):
         # Aqui me complique re duro, asi que capaz esto se puede mejorar un monton
 
         # Esta parte reconoce solo la cabeza y la guarda en la matriz
-        img = np.array(mss.mss().grab(self.monitor))
+        img = np.array(self.sct.grab(self.monitor))
         img_hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
 
         lower = np.array([110, 150, 240])          # (0-179, 0-255, 0-255)
@@ -136,7 +140,7 @@ class Observer:
             self.snake.append(element)
 
     def getGame(self):
-        img = np.array(mss.mss().grab(self.monitor))
+        img = np.array(self.sct.grab(self.monitor))
         img_hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
 
         lower = np.array([110, 150, 150])          # (0-179, 0-255, 0-255)
@@ -163,16 +167,22 @@ class Observer:
                             self.snake.append([cy+ny, cx+nx])
                             self.grid[cy+ny][cx+nx] = 2
                             q.append([cy+ny, cx+nx])
-                            self.getApple()
+                            res = self.getApple()
+                            while not res:
+                                res = self.getApple()
                         else:
                             self.snake.append([cy+ny, cx+nx])
                             self.grid[cy+ny][cx+nx] = 2
                             q.append([cy+ny, cx+nx])
                             dy,dx = self.snake.popleft()
                             self.grid[dy,dx] = 0
+                            
                         print(self.grid)
 
-    def compute(self, percept):
+    def compute(self, percept = None):
+        if percept == None:
+            self.getGame()
+
         if percept == "init":
             time.sleep(0.5)
             pg.click(self.startGame())
@@ -190,4 +200,4 @@ o = Observer()
 o.compute('init')
 
 while True:
-    o.getGame()
+    o.compute()
