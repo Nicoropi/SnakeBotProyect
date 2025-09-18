@@ -162,7 +162,7 @@ class Observer:
                     blue_pixels = cv.countNonZero(sqr)
                     ratio = blue_pixels / area
 
-                    if ratio > 0.25:
+                    if ratio > 0.3:
                         if self.grid[cy+ny][cx+nx]==1:
                             self.snake.append([cy+ny, cx+nx])
                             self.grid[cy+ny][cx+nx] = 2
