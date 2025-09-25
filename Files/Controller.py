@@ -1,7 +1,6 @@
-import pyautogui as pg
 from enum import Enum
-
-# no se si realmente es necesario esto... pero por si algo aquí está
+import time 
+import pyautogui as pg
 
 class dirs(Enum):
     u = 'up'
@@ -9,17 +8,24 @@ class dirs(Enum):
     r = 'right'
     l = 'left'
 
-class Controller():
+class Controller:
     def __init__(self):
         self.last = None
 
-    def compute(self, percept):
+    def click(self, x, y):
+        pg.click(x, y)
+
+    def press(self, percept):
         if self.last == percept:
             return
-        
         self.last = percept
         pg.press(percept)
-        return
-    
-c = Controller()
-c.compute(dirs.LEFT)
+        return 
+
+
+    def compute(self, percept):
+        # print(f"Im controller, i received {percept}")
+        if(percept[0] == "press"):
+            self.press(percept[1])
+        elif(percept[0] == "click"):
+            self.click(percept[1],percept[2])

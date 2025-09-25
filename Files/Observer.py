@@ -1,9 +1,9 @@
 from collections import deque
+from controller import Controller
 import time
 import mss
 import numpy as np
 import cv2 as cv
-import pyautogui as pg
 
 class Observer:
     def __init__(self):
@@ -12,9 +12,11 @@ class Observer:
         self.grid = []
         self.snake = deque()
         self.sct = mss.mss()
+        self.head = None
+        self.apple = None
 
     def startGame(self):
-        img = np.array(self.sct.grab(self.sct.monitors[1]))
+        img = np.array(self.sct.grab(self.sct.monitors[0]))
 
         img_gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
         ret, im = cv.threshold(img_gray, 250, 255, cv.THRESH_BINARY)
@@ -30,11 +32,11 @@ class Observer:
                 x,y,w,h = cv.boundingRect(approx)
                 x_mid = int(x+w/2)
                 y_mid = int(y+h/2)
-        
+ 
         return ([x_mid,y_mid])
 
     def getBoard(self):
-        img = np.array(self.sct.grab(self.sct.monitors[1]))
+        img = np.array(self.sct.grab(self.sct.monitors[0]))
 
         # Video que me ayudo con las mascaras
         # https://www.youtube.com/watch?v=SJCu1d4xakQ&t=882s
@@ -46,8 +48,14 @@ class Observer:
         # cv.imwrite("mask.png", img)
 
         coords = max(contours, key=cv.contourArea)
-        self.monitor["left"], self.monitor["top"] = coords[0][0]
-        self.monitor["width"], self.monitor["height"] = coords[2][0] - coords[0][0]
+        x, y, w, h = cv.boundingRect(coords)
+
+        self.monitor["left"] = x
+        self.monitor["top"] = y
+        self.monitor["width"] = w
+        self.monitor["height"] = h
+        # self.monitor["left"], self.monitor["top"] = coords[0][0]
+        # self.monitor["width"], self.monitor["height"] = coords[2][0] - coords[0][0]
 
         self.monitor = {k: int(v) for k, v in self.monitor.items()}
 
@@ -66,32 +74,35 @@ class Observer:
         x_sqrs = (self.monitor["width"] // (self.dim - 1)) + 2
         self.grid = np.zeros((y_sqrs,x_sqrs))
 
-        for i in range(len(self.grid)):
-            for j in range(len(self.grid[0])):
-                if j == 0 or j == len(self.grid[0])-1 or i == 0 or i == len(self.grid)-1:
-                    self.grid[i][j] = 9
+        self.grid[0, :] = 9
+        self.grid[:,0] = 9
+        self.grid[-1,:] = 9
+        self.grid[:,-1] = 9
 
     def getApple(self):
         img = np.array(self.sct.grab(self.monitor))
         img_hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
 
-        # Video que me ayudo
-        # https://www.youtube.com/watch?v=cMJwqxskyek
-        lower = np.array([ 0, 150, 100])          # (0-179, 0-255, 0-255)
-        upper = np.array([10, 255, 255])          # (0-179, 0-255, 0-255)
-        mask = cv.inRange(img_hsv, lower, upper)
+        # Downscaling
+        scale = 0.5
+        small = cv.resize(img_hsv, (0, 0), fx=scale, fy=scale)
 
-        contours, hierarchy = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-        if len(contours) != 0:
-            for contour in contours:
-                if cv.contourArea(contour) > 300:
-                    x, y, w, h = cv.boundingRect(contour)
-                    x_coor = int(x+w/2) // self.dim
-                    y_coor = int(y+h/2) // self.dim
-                    self.grid[y_coor+1][x_coor+1] = 1
-                    return True
-        
-        return False
+        lower = np.array([0,  150, 150])   # ejemplo: verde
+        upper = np.array([10, 255, 255])
+        mask = cv.inRange(small, lower, upper)
+
+        ys, xs = np.where(mask > 0)
+        if len(xs) == 0 or len(ys) == 0:
+            return None
+
+        x_mid = int(((xs.min() + xs.max()) // 2) / scale)
+        y_mid = int(((ys.min() + ys.max()) // 2) / scale)
+
+        # Coordenada en grid
+        x_coor = (x_mid // self.dim) + 1
+        y_coor = (y_mid // self.dim) + 1
+        self.apple = (y_coor, x_coor)
+        self.grid[y_coor][x_coor] = 1
 
     def getSnake(self):
         # Aqui me complique re duro, asi que capaz esto se puede mejorar un monton
@@ -131,73 +142,102 @@ class Observer:
                 sqr = mask[(vy)*self.dim:(vy+1)*self.dim, (vx-1)*self.dim:(vx)*self.dim]
                 blue_pixels = cv.countNonZero(sqr)
                 ratio = blue_pixels / area
-                if ratio > 0.25:
+                if ratio > 0.15:
                     self.grid[cy][cx-1] = 2
                     q.append([cy, cx-1])
                     temp_list.append([int(cy), int(cx-1)])
 
         for element in (temp_list[::-1]):
             self.snake.append(element)
+        # print(self.snake)
+        self.head = (temp_list[0][0], temp_list[0][1])
 
-    def getGame(self):
+    def getHead(self, img_hsv, last_dir, head):
+        # --- Detectar ojos (blanco en HSV) ---
+        lower_white = np.array([0, 0, 200])     
+        upper_white = np.array([180, 40, 255])
+        mask_eyes = cv.inRange(img_hsv, lower_white, upper_white)
+
+        contours, _ = cv.findContours(mask_eyes, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        contours = sorted(contours, key=cv.contourArea, reverse=True)[:2]
+
+        if len(contours) == 0:
+            return head
+
+        centers = []
+        for c in contours:
+            M = cv.moments(c)
+            if M["m00"] > 0:
+                cx = int(M["m10"] / M["m00"])
+                cy = int(M["m01"] / M["m00"])
+                centers.append((cy, cx))
+
+        if len(centers) == 2:
+            head_y = (centers[0][0] + centers[1][0]) // 2
+            head_x = (centers[0][1] + centers[1][1]) // 2
+        else:
+            head_y, head_x = centers[0]
+
+        new_head = (head_y // self.dim + 1, head_x // self.dim + 1)
+        return new_head
+    
+    def getGame(self, dir):
         img = np.array(self.sct.grab(self.monitor))
         img_hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
 
-        lower = np.array([110, 150, 150])          # (0-179, 0-255, 0-255)
-        upper = np.array([120, 255, 255])          # (0-179, 0-255, 0-255)
-        mask = cv.inRange(img_hsv, lower, upper)
+        # lower = np.array([110, 150, 150])          # (0-179, 0-255, 0-255)
+        # upper = np.array([120, 255, 255])          # (0-179, 0-255, 0-255)
+        # mask = cv.inRange(img_hsv, lower, upper)
 
-        q = deque()
-        q.append(self.snake[-1]) 
-        area = self.dim * self.dim
+        # Calcular coordenada en grid directamente
+        # ys, xs = np.where(mask > 0)
+        # points = {(y // self.dim + 1, x // self.dim + 1) for y, x in zip(ys, xs)}
+        new_head = self.getHead(img_hsv, dir, self.head)
+        # print(new_head)
+
+        dy = abs(new_head[0] - self.head[0])
+        dx = abs(new_head[1] - self.head[1])
         
-        directions = [(-1,0),(1,0),(0,-1),(0,1)]
-        while q:
-            cy,cx = q.pop()                        # Grid coordinates
-            vx = cx-1; vy = cy-1                   # Image coordinates
+        if dy + dx == 0:
+            if self.apple and new_head == self.apple:
+                self.apple = None
 
-            for ny,nx in directions:
-                if self.grid[cy+ny][cx+nx] == 0 or self.grid[cy+ny][cx+nx]==1:
-                    sqr = mask[(vy+ny)*self.dim:(vy+ny+1)*self.dim, (vx+nx)*self.dim:(vx+nx+1)*self.dim]
-                    blue_pixels = cv.countNonZero(sqr)
-                    ratio = blue_pixels / area
+            return
 
-                    if ratio > 0.3:
-                        if self.grid[cy+ny][cx+nx]==1:
-                            self.snake.append([cy+ny, cx+nx])
-                            self.grid[cy+ny][cx+nx] = 2
-                            q.append([cy+ny, cx+nx])
-                            res = self.getApple()
-                            while not res:
-                                res = self.getApple()
-                        else:
-                            self.snake.append([cy+ny, cx+nx])
-                            self.grid[cy+ny][cx+nx] = 2
-                            q.append([cy+ny, cx+nx])
-                            dy,dx = self.snake.popleft()
-                            self.grid[dy,dx] = 0
-                            
-                        print(self.grid)
+        elif dy + dx == 1:
+            self.snake.append(new_head)
+            self.grid[new_head] = 2
+            self.head = new_head
+
+            if self.apple and new_head == self.apple:
+                self.apple = None
+            else:
+                tail_y, tail_x = self.snake.popleft()
+                self.grid[tail_y, tail_x] = 0
+
+        else:
+            return
 
     def compute(self, percept = None):
-        if percept == None:
-            self.getGame()
+        # print(f"Im observer, i received {percept}")
+        if percept in ["up", "down", "right", "left"]:
 
-        if percept == "init":
-            time.sleep(0.5)
-            pg.click(self.startGame())
+            self.getGame(percept)
+            if not self.apple:
+                self.getApple()
             
-            time.sleep(0.5)
-            o.getBoard()
-            o.getGrid()
-            o.getApple()
-            o.getSnake()
+            # print(self.grid)
+            return [self.grid, self.head, self.apple]
 
-            print(self.grid)
+        elif percept == "init":
+            time.sleep(0.3)
+            return self.startGame()
 
-
-o = Observer()
-o.compute('init')
-
-while True:
-    o.compute()
+        elif percept == "define":
+            time.sleep(0.3)
+            self.getBoard()
+            self.getGrid()
+            self.getApple()
+            self.getSnake()
+            # print(self.grid, self.head, self.apple)
+            return [self.grid, self.head, self.apple]
