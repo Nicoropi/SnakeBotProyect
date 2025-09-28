@@ -20,6 +20,7 @@ class Controller:
             return
         self.last = percept
         pg.press(percept)
+        print(percept)
         return 
 
 

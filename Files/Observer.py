@@ -1,5 +1,5 @@
 from collections import deque
-from controller import Controller
+# from controller import Controller
 import time
 import mss
 import numpy as np
@@ -14,6 +14,8 @@ class Observer:
         self.sct = mss.mss()
         self.head = None
         self.apple = None
+        self.lastHead = None
+        self.tail = None
 
     def startGame(self):
         img = np.array(self.sct.grab(self.sct.monitors[0]))
@@ -176,9 +178,12 @@ class Observer:
             head_y = (centers[0][0] + centers[1][0]) // 2
             head_x = (centers[0][1] + centers[1][1]) // 2
         else:
+            if len(centers) == 0: 
+                return self.lastHead
             head_y, head_x = centers[0]
 
         new_head = (head_y // self.dim + 1, head_x // self.dim + 1)
+        self.lastHead = new_head
         return new_head
     
     def getGame(self, dir):
@@ -201,7 +206,7 @@ class Observer:
         if dy + dx == 0:
             if self.apple and new_head == self.apple:
                 self.apple = None
-
+            self.tail = self.snake[0]
             return
 
         elif dy + dx == 1:
@@ -214,8 +219,9 @@ class Observer:
             else:
                 tail_y, tail_x = self.snake.popleft()
                 self.grid[tail_y, tail_x] = 0
-
+            self.tail = self.snake[0]
         else:
+            self.tail = self.snake[0]
             return
 
     def compute(self, percept = None):
@@ -227,7 +233,7 @@ class Observer:
                 self.getApple()
             
             # print(self.grid)
-            return [self.grid, self.head, self.apple]
+            return [self.grid, self.head, self.apple, self.tail]
 
         elif percept == "init":
             time.sleep(0.3)

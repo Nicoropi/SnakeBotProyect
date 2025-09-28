@@ -105,12 +105,17 @@ class Calculator():
         if percept is not None:
             path = astar(percept[0], percept[1],percept[2])
             #return ["press", pathChanges(path)[0]]
-
-            res = pathChanges(path)
-            if len(res) > 0:
-                self.last = res[0]
-                return ["press", res[0]]
-            
+            if path is not None:
+                res = pathChanges(path)
+                if len(res) > 0:
+                    self.last = res[0]
+                    return ["press", res[0]]
+            path = astar(percept[0], percept[1], percept[3])
+            if path is not None:
+                res = pathChanges(path)
+                if len(res) > 0:
+                    self.last = res[0]
+                    return ["press", res[0]]
             return ["press", self.last]
             
             
