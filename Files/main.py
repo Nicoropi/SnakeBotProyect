@@ -2,6 +2,7 @@
 from Controller import Controller
 from Observer import Observer 
 from Calculator import Calculator
+from Logger import Logger
 import numpy as np
 import time
 
@@ -10,6 +11,8 @@ def main():
     contr = Controller()
     obs = Observer()
     calc = Calculator()
+    logger = Logger()  # Crear instancia del logger
+    
     # Get start button from screen
     position = obs.compute("init")
     # Press start button
@@ -18,6 +21,10 @@ def main():
     gameState = obs.compute("define")
     # DEBUG GRID CHANGES OVER TIME
     lastState = gameState[0].copy()
+    
+    # Registrar estado inicial
+    logger.log_state(gameState[0], gameState[1], gameState[2], 
+                    additional_info="Estado inicial del juego")
 
 
     GOOGLE_SNAKE_FPS = 60  # Estimate this by observation
@@ -39,6 +46,14 @@ def main():
         if not np.array_equal(lastState, gameState[0]):
             print(gameState[0])
             lastState = gameState[0].copy()
+            # Registrar el nuevo estado y el movimiento realizado
+            logger.log_state(
+                gameState[0], 
+                gameState[1], 
+                gameState[2], 
+                move=nextMove[1],
+                additional_info=f"Score: {len([(i, j) for i, j in zip(*np.where(gameState[0] == 2))])}"
+            )
 
 if __name__ == "__main__":
     main()
