@@ -578,8 +578,23 @@ class Calculator():
                 direction = pathChanges([self.last_valid_path[0], self.last_valid_path[1]])[0]
                 return ["press", direction]
 
-            for direction in ['up', 'right', 'down', 'left']:
-                return ["press", direction]
+            # Verificar cada dirección posible de manera segura
+            for direction_name in ['up', 'right', 'down', 'left']:
+                direction = dirs[direction_name].value
+                new_pos = (pos[0] + direction[0], pos[1] + direction[1])
+                
+                # Verificación completa de seguridad
+                if (0 <= new_pos[0] < grid.shape[0] and  # Dentro de límites verticales
+                    0 <= new_pos[1] < grid.shape[1] and  # Dentro de límites horizontales
+                    grid[new_pos] != 9 and               # No es pared
+                    grid[new_pos] != 2):                 # No es cuerpo de serpiente
+                    
+                    # Verificar si el movimiento es seguro
+                    if self.is_move_safe(grid, pos, snake_body, [pos, new_pos]):
+                        return ["press", direction_name]
+            
+            # Si no se encontró ningún movimiento seguro, usar la última dirección como fallback
+            return ["press", "right"]
 
         except Exception as e:
             error_msg = f"Error in compute: {str(e)}"
