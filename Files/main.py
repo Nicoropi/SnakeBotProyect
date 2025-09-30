@@ -37,7 +37,7 @@ def main():
             time.sleep(FRAME_TIME - time_since_last)
         gameState = obs.compute(nextMove[1])
         if not np.array_equal(lastState, gameState[0]):
-            print(gameState[0])
+            # print(gameState[0])
             lastState = gameState[0].copy()
 
 if __name__ == "__main__":

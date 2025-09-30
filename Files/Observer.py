@@ -154,74 +154,97 @@ class Observer:
         # print(self.snake)
         self.head = (temp_list[0][0], temp_list[0][1])
 
-    def getHead(self, img_hsv, last_dir, head):
-        # --- Detectar ojos (blanco en HSV) ---
-        lower_white = np.array([0, 0, 200])     
-        upper_white = np.array([180, 40, 255])
-        mask_eyes = cv.inRange(img_hsv, lower_white, upper_white)
-
-        contours, _ = cv.findContours(mask_eyes, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-        contours = sorted(contours, key=cv.contourArea, reverse=True)[:2]
-
-        if len(contours) == 0:
-            return head
-
-        centers = []
-        for c in contours:
-            M = cv.moments(c)
-            if M["m00"] > 0:
-                cx = int(M["m10"] / M["m00"])
-                cy = int(M["m01"] / M["m00"])
-                centers.append((cy, cx))
-
-        if len(centers) == 2:
-            head_y = (centers[0][0] + centers[1][0]) // 2
-            head_x = (centers[0][1] + centers[1][1]) // 2
-        else:
-            if len(centers) == 0: 
-                return self.lastHead
-            head_y, head_x = centers[0]
-
-        new_head = (head_y // self.dim + 1, head_x // self.dim + 1)
-        self.lastHead = new_head
-        return new_head
+    def cell_has_snake(self, mask, y, x, threshold=0.35):
+        y0, y1 = (y-1)*(self.dim+1), y*(self.dim+1) 
+        x0, x1 = (x-1)*(self.dim+1), x*(self.dim+1) 
+        sqr = mask[y0:y1, x0:x1] 
+        ratio = cv.countNonZero(sqr) / (self.dim * self.dim) 
+        return ratio > threshold 
     
-    def getGame(self, dir):
-        img = np.array(self.sct.grab(self.monitor))
-        img_hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
-
-        # lower = np.array([110, 150, 150])          # (0-179, 0-255, 0-255)
-        # upper = np.array([120, 255, 255])          # (0-179, 0-255, 0-255)
-        # mask = cv.inRange(img_hsv, lower, upper)
-
-        # Calcular coordenada en grid directamente
-        # ys, xs = np.where(mask > 0)
-        # points = {(y // self.dim + 1, x // self.dim + 1) for y, x in zip(ys, xs)}
-        new_head = self.getHead(img_hsv, dir, self.head)
-        # print(new_head)
-
-        dy = abs(new_head[0] - self.head[0])
-        dx = abs(new_head[1] - self.head[1])
+    def getHead(self, mask, last_dir, head): 
+        ys, xs = np.where(mask > 0) 
+        if len(xs) == 0 or len(ys) == 0: 
+            return head # Pasar todos los píxeles detectados a coordenadas de grid 
         
-        if dy + dx == 0:
+        points = {(y // self.dim + 1, x // self.dim + 1) for y, x in zip(ys, xs)} 
+        
+        expected = { 
+            "up": (head[0] - 1, head[1]), 
+            "down": (head[0] + 1, head[1]), 
+            "left": (head[0], head[1] - 1), 
+            "right": (head[0], head[1] + 1),
+        }[last_dir] 
+        
+        if expected in points and self.cell_has_snake(mask, *expected): 
+            return expected 
+        
+        if last_dir == "up":
+            min_y = min(p[0] for p in points) 
+            candidates = [p for p in points if p[0] == min_y] 
+            return min(candidates, key=lambda p: abs(p[1] - head[1])) 
+        
+        elif last_dir == "down": 
+            max_y = max(p[0] for p in points) 
+            candidates = [p for p in points if p[0] == max_y] 
+            return min(candidates, key=lambda p: abs(p[1] - head[1])) 
+        
+        elif last_dir == "left": 
+            min_x = min(p[1] for p in points) 
+            candidates = [p for p in points if p[1] == min_x] 
+            return min(candidates, key=lambda p: abs(p[0] - head[0])) 
+        
+        elif last_dir == "right": 
+            max_x = max(p[1] for p in points) 
+            candidates = [p for p in points if p[1] == max_x] 
+            return min(candidates, key=lambda p: abs(p[0] - head[0])) 
+        
+        return head 
+    
+    def getGame(self, dir): 
+        img = np.array(self.sct.grab(self.monitor)) 
+        img_hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV) 
+        
+        lower = np.array([110, 150, 150]) # (0-179, 0-255, 0-255) 
+        upper = np.array([120, 255, 255]) # (0-179, 0-255, 0-255) 
+        mask = cv.inRange(img_hsv, lower, upper) 
+        
+        # Calcular coordenada en grid directamente 
+        # ys, xs = np.where(mask > 0) 
+        # points = {(y // self.dim + 1, x // self.dim + 1) for y, x in zip(ys, xs)} 
+        
+        new_head = self.getHead(mask, dir, self.head) 
+        # print(new_head) 
+        
+        # --- híbrido --- 
+        dy = abs(new_head[0] - self.head[0]) 
+        dx = abs(new_head[1] - self.head[1]) 
+        
+        if dy + dx == 0: 
             if self.apple and new_head == self.apple:
-                self.apple = None
-            self.tail = self.snake[0]
-            return
-
-        elif dy + dx == 1:
-            self.snake.append(new_head)
-            self.grid[new_head] = 2
-            self.head = new_head
-
-            if self.apple and new_head == self.apple:
-                self.apple = None
-            else:
-                tail_y, tail_x = self.snake.popleft()
-                self.grid[tail_y, tail_x] = 0
-            self.tail = self.snake[0]
-        else:
-            self.tail = self.snake[0]
+                self.apple = None 
+                
+            return 
+        
+        elif dy + dx == 1: 
+            # Caso normal → incremental (se movió una celda) 
+            self.snake.append(new_head) 
+            self.grid[new_head] = 2 
+            self.head = new_head 
+            
+            if self.apple and new_head == self.apple: 
+                self.apple = None 
+            else: 
+                tail_y, tail_x = self.snake.popleft() 
+                self.grid[tail_y, tail_x] = 0 
+                
+        else: 
+            # Se saltó más de una celda → opcional: reconstrucción completa
+            # (si no quieres reconstrucción, simplemente "return") 
+            # self.grid[self.grid == 2] = 0 
+            # self.snake.clear() 
+            # self.snake.append(new_head) 
+            # self.grid[new_head] = 2 
+            # self.head = new_head 
             return
 
     def compute(self, percept = None):
