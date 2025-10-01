@@ -9,10 +9,14 @@ class Observer:
     def __init__(self):
         self.monitor = {"top": 0, "left": 0, "width": 0, "height": 0}
         self.dim = 0
+
         self.grid = []
         self.gridCoords = []
+        
         self.snake = deque()
         self.sct = mss.mss()
+        self.cellFlag = False
+
         self.head = None
         self.apple = None
         self.lastHead = None
@@ -87,10 +91,13 @@ class Observer:
 
         for i in range(1, y_sqrs - 1):       
             for j in range(1, x_sqrs - 1):
-                cy = ((i - 1) * (self.dim - 1)) + temp
-                cx = ((j - 1) * (self.dim - 1)) + temp
+                cy = ((i - 1) * (self.dim)) + temp
+                cx = ((j - 1) * (self.dim)) + temp
 
                 self.gridCoords[i, j] = [cy, cx]
+                
+                if self.gridCoords[i, j][0] != -1 and self.gridCoords[i, j][1] != -1:
+                    cv.circle(img, (self.gridCoords[i, j][1], self.gridCoords[i, j][0]), 5, (0, 0, 255), -1)  # Rojo, tamaño 5
 
     def getApple(self):
         img = np.array(self.sct.grab(self.monitor))
@@ -165,13 +172,6 @@ class Observer:
         # print(self.snake)
         self.head = (temp_list[0][0], temp_list[0][1])
 
-    def cell_has_snake(self, mask, y, x):
-        cy, cx = self.gridCoords[y, x]
-        if cy == -1:    # es pared
-            return False
-        return mask[cy, cx] > 0
-
-
     def getHead(self, mask, last_dir, head):
         points = set()
 
@@ -197,27 +197,6 @@ class Observer:
         if expected in points:
             return expected
 
-        # fallback (similar a lo que ya tenías)
-        if last_dir == "up":
-            min_y = min(p[0] for p in points)
-            candidates = [p for p in points if p[0] == min_y]
-            return min(candidates, key=lambda p: abs(p[1] - head[1]))
-
-        elif last_dir == "down":
-            max_y = max(p[0] for p in points)
-            candidates = [p for p in points if p[0] == max_y]
-            return min(candidates, key=lambda p: abs(p[1] - head[1]))
-
-        elif last_dir == "left":
-            min_x = min(p[1] for p in points)
-            candidates = [p for p in points if p[1] == min_x]
-            return min(candidates, key=lambda p: abs(p[0] - head[0]))
-
-        elif last_dir == "right":
-            max_x = max(p[1] for p in points)
-            candidates = [p for p in points if p[1] == max_x]
-            return min(candidates, key=lambda p: abs(p[0] - head[0]))
-
         return head
     
     def getGame(self, dir): 
@@ -227,10 +206,8 @@ class Observer:
         lower = np.array([110, 150, 150]) # (0-179, 0-255, 0-255) 
         upper = np.array([120, 255, 255]) # (0-179, 0-255, 0-255) 
         mask = cv.inRange(img_hsv, lower, upper) 
-        
-        # Calcular coordenada en grid directamente 
-        # ys, xs = np.where(mask > 0) 
-        # points = {(y // self.dim + 1, x // self.dim + 1) for y, x in zip(ys, xs)} 
+
+        # cv.imshow("Grid Points", mask)
         
         new_head = self.getHead(mask, dir, self.head) 
         # print(new_head) 
@@ -243,9 +220,15 @@ class Observer:
             if self.apple and new_head == self.apple:
                 self.apple = None 
                 
+            self.cellFlag = False    
             return 
         
         elif dy + dx == 1: 
+            
+            if not self.cellFlag:
+                self.cellFlag = True
+                return
+
             # Caso normal → incremental (se movió una celda) 
             self.snake.append(new_head) 
             self.grid[new_head] = 2 
@@ -258,13 +241,6 @@ class Observer:
                 self.grid[tail_y, tail_x] = 0 
                 
         else: 
-            # Se saltó más de una celda → opcional: reconstrucción completa
-            # (si no quieres reconstrucción, simplemente "return") 
-            # self.grid[self.grid == 2] = 0 
-            # self.snake.clear() 
-            # self.snake.append(new_head) 
-            # self.grid[new_head] = 2 
-            # self.head = new_head 
             return
 
     def compute(self, percept = None):
@@ -275,7 +251,7 @@ class Observer:
             if not self.apple:
                 self.getApple()
             
-            print(self.grid)
+            # print(self.head)
             return [self.grid, self.head, self.apple, self.tail]
 
         elif percept == "init":
@@ -290,3 +266,4 @@ class Observer:
             self.getSnake()
             # print(self.grid, self.head, self.apple)
             return [self.grid, self.head, self.apple]
+        
