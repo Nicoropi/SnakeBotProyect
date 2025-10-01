@@ -10,6 +10,7 @@ class Observer:
         self.monitor = {"top": 0, "left": 0, "width": 0, "height": 0}
         self.dim = 0
         self.grid = []
+        self.gridCoords = []
         self.snake = deque()
         self.sct = mss.mss()
         self.head = None
@@ -75,11 +76,21 @@ class Observer:
         y_sqrs = (self.monitor["height"] // (self.dim - 1)) + 2
         x_sqrs = (self.monitor["width"] // (self.dim - 1)) + 2
         self.grid = np.zeros((y_sqrs,x_sqrs))
-
+        
         self.grid[0, :] = 9
         self.grid[:,0] = 9
         self.grid[-1,:] = 9
         self.grid[:,-1] = 9
+
+        self.gridCoords = np.full((y_sqrs, x_sqrs, 2), -1, dtype=int)  # -1 = inválido
+        temp = self.dim // 2
+
+        for i in range(1, y_sqrs - 1):       
+            for j in range(1, x_sqrs - 1):
+                cy = ((i - 1) * (self.dim - 1)) + temp
+                cx = ((j - 1) * (self.dim - 1)) + temp
+
+                self.gridCoords[i, j] = [cy, cx]
 
     def getApple(self):
         img = np.array(self.sct.grab(self.monitor))
@@ -154,51 +165,60 @@ class Observer:
         # print(self.snake)
         self.head = (temp_list[0][0], temp_list[0][1])
 
-    def cell_has_snake(self, mask, y, x, threshold=0.35):
-        y0, y1 = (y-1)*(self.dim+1), y*(self.dim+1) 
-        x0, x1 = (x-1)*(self.dim+1), x*(self.dim+1) 
-        sqr = mask[y0:y1, x0:x1] 
-        ratio = cv.countNonZero(sqr) / (self.dim * self.dim) 
-        return ratio > threshold 
-    
-    def getHead(self, mask, last_dir, head): 
-        ys, xs = np.where(mask > 0) 
-        if len(xs) == 0 or len(ys) == 0: 
-            return head # Pasar todos los píxeles detectados a coordenadas de grid 
-        
-        points = {(y // self.dim + 1, x // self.dim + 1) for y, x in zip(ys, xs)} 
-        
-        expected = { 
-            "up": (head[0] - 1, head[1]), 
-            "down": (head[0] + 1, head[1]), 
-            "left": (head[0], head[1] - 1), 
+    def cell_has_snake(self, mask, y, x):
+        cy, cx = self.gridCoords[y, x]
+        if cy == -1:    # es pared
+            return False
+        return mask[cy, cx] > 0
+
+
+    def getHead(self, mask, last_dir, head):
+        points = set()
+
+        y_sqrs, x_sqrs = self.gridCoords.shape[:2]
+        for i in range(1, y_sqrs - 1):          # ignorar paredes
+            for j in range(1, x_sqrs - 1):      # ignorar paredes
+                cy, cx = self.gridCoords[i, j]
+                if cy == -1:                    # seguridad extra
+                    continue
+                if mask[cy, cx] > 0:            # azul en pixel central
+                    points.add((i, j))          # SIN +1
+
+        if not points:
+            return head
+
+        expected = {
+            "up":    (head[0] - 1, head[1]),
+            "down":  (head[0] + 1, head[1]),
+            "left":  (head[0], head[1] - 1),
             "right": (head[0], head[1] + 1),
-        }[last_dir] 
-        
-        if expected in points and self.cell_has_snake(mask, *expected): 
-            return expected 
-        
+        }[last_dir]
+
+        if expected in points:
+            return expected
+
+        # fallback (similar a lo que ya tenías)
         if last_dir == "up":
-            min_y = min(p[0] for p in points) 
-            candidates = [p for p in points if p[0] == min_y] 
-            return min(candidates, key=lambda p: abs(p[1] - head[1])) 
-        
-        elif last_dir == "down": 
-            max_y = max(p[0] for p in points) 
-            candidates = [p for p in points if p[0] == max_y] 
-            return min(candidates, key=lambda p: abs(p[1] - head[1])) 
-        
-        elif last_dir == "left": 
-            min_x = min(p[1] for p in points) 
-            candidates = [p for p in points if p[1] == min_x] 
-            return min(candidates, key=lambda p: abs(p[0] - head[0])) 
-        
-        elif last_dir == "right": 
-            max_x = max(p[1] for p in points) 
-            candidates = [p for p in points if p[1] == max_x] 
-            return min(candidates, key=lambda p: abs(p[0] - head[0])) 
-        
-        return head 
+            min_y = min(p[0] for p in points)
+            candidates = [p for p in points if p[0] == min_y]
+            return min(candidates, key=lambda p: abs(p[1] - head[1]))
+
+        elif last_dir == "down":
+            max_y = max(p[0] for p in points)
+            candidates = [p for p in points if p[0] == max_y]
+            return min(candidates, key=lambda p: abs(p[1] - head[1]))
+
+        elif last_dir == "left":
+            min_x = min(p[1] for p in points)
+            candidates = [p for p in points if p[1] == min_x]
+            return min(candidates, key=lambda p: abs(p[0] - head[0]))
+
+        elif last_dir == "right":
+            max_x = max(p[1] for p in points)
+            candidates = [p for p in points if p[1] == max_x]
+            return min(candidates, key=lambda p: abs(p[0] - head[0]))
+
+        return head
     
     def getGame(self, dir): 
         img = np.array(self.sct.grab(self.monitor)) 
@@ -255,7 +275,7 @@ class Observer:
             if not self.apple:
                 self.getApple()
             
-            # print(self.grid)
+            print(self.grid)
             return [self.grid, self.head, self.apple, self.tail]
 
         elif percept == "init":
